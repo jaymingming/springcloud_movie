@@ -8,6 +8,8 @@ import com.mooc.meetingfilm.cinema.service.CinemaServiceAPI;
 import com.mooc.meetingfilm.utils.common.vo.BasePageVO;
 import com.mooc.meetingfilm.utils.common.vo.BaseResponseVO;
 import com.mooc.meetingfilm.utils.exception.CommonServiceException;
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,17 +42,56 @@ public class CinnemaController {
         return BaseResponseVO.success();
     }
 
+    /*
+       fallback是业务处理的保底方案，尽可能保证这个保底方案一定能成功
+    */
+    public BaseResponseVO fallbackMethod(BasePageVO basePageVO) throws CommonServiceException{
+        /*
+            打发票， -》 没打印纸了， 换台机器或者下次再试
+            -》 触发告警 -》 告知运维人员，打印发票业务挂了
+         */
+        // describeCinemas -》 获取影院列表 -> 在Redis中查询影院列表[redis挂了，或者数据没了] -> 获取超时
 
+        // fallback里捕获到超时或者数据内容与分页数不一致
+
+        // fallback就在数据库中查询真实的影院信息
+
+        // 返回一定是成功，或者业务处理失败
+        return BaseResponseVO.success();
+    }
+
+    @HystrixCommand(fallbackMethod = "fallbackMethod",
+            commandProperties = {
+                    @HystrixProperty(name = "execution.isolation.strategy", value = "THREAD"),
+                    @HystrixProperty(name = "execution.isolation.thread.timeoutInMilliseconds", value= "1000"),
+                    @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),
+                    @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "50")
+            },
+            threadPoolProperties = {
+                    @HystrixProperty(name = "coreSize", value = "1"),
+                    @HystrixProperty(name = "maxQueueSize", value = "10"),
+                    @HystrixProperty(name = "keepAliveTimeMinutes", value = "1000"),
+                    @HystrixProperty(name = "queueSizeRejectionThreshold", value = "8"),
+                    @HystrixProperty(name = "metrics.rollingStats.numBuckets", value = "12"),
+                    @HystrixProperty(name = "metrics.rollingStats.timeInMilliseconds", value = "1500")
+            },ignoreExceptions = CommonServiceException.class)
     @RequestMapping(value = "",method = RequestMethod.GET)
     public BaseResponseVO describeCinemas(BasePageVO basePageVO) throws CommonServiceException {
 
         IPage<DescribeCinemasRespVO> describeCinemasRespVOIPage = cinemaServiceAPI.describeCinemas(basePageVO.getNowPage(), basePageVO.getPageSize());
 
-        Map<String, Object> results = descrbePageResult(describeCinemasRespVOIPage,"cinemas");
+        if(basePageVO.getNowPage()>10000){
+            throw new CommonServiceException(400,"nowPage太大了，不支持此处理");
+            //            try {
+            //                Thread.sleep(2000);
+            //            } catch (InterruptedException e) {
+            //                e.printStackTrace();
+            //            }
+        }
 
         // TODO 调用封装的分页返回方法
 
-        return BaseResponseVO.success(results);
+        return BaseResponseVO.success();
     }
 
     // 获取分页对象的公共接口

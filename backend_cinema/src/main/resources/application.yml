@@ -15,6 +15,12 @@ spring:
     password: root
     filters: log4j,wall,mergeStat
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
 mybatis-plus:
   mapper-locations: classpath*:com/mooc/meetingfilm/**/xml/*Mapper.xml
   global-config:
